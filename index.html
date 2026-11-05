@@ -1,0 +1,1129 @@
+<!DOCTYPE html>
+<html lang="en">
+
+  <head>
+    <meta charset="UTF-8">
+    <title>Type play</title>
+    
+
+  </head>
+    
+  <body>
+  <!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>图形轮廓描边生成器</title>
+    <style>
+        :root {
+            /* 替换为提供的灰色背景色 */
+            --bg: #d4d5d0; 
+            --panel: #ffffff;
+            --text: #18181b;
+            --border: #e4e4e7;
+            --accent: #000000;
+        }
+
+/* 增加全局盒模型，确保所有设置 width: 100% 的元素加上 padding 后绝不溢出 */
+html { box-sizing: border-box; }
+*, *:before, *:after { box-sizing: inherit; }
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background-color: var(--bg);
+    color: var(--text);
+    margin: 0;
+    padding: 20px;
+    display: flex;
+    gap: 80px; /* 拉开画布与面板之间的间距 */
+    justify-content: center; 
+    align-items: center;     
+    min-height: 100vh;       
+    flex-wrap: wrap;
+}
+
+.canvas-area {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+/* 纯白画布，无边框与无阴影，直角3:4比例 */
+canvas {
+    background: #ffffff;
+    max-width: 100%;
+    border: none; 
+    display: block;
+}
+
+.controls {
+    background: var(--panel);
+    padding: 25px;
+    width: 100%;
+    max-width: 330px; 
+    border: none; /* 去除控制面板的灰色线框 */
+    height: 840px; 
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column; 
+}
+/* 将控制组下边距从18px调整为14px，让排版稍密一些 */
+.control-group { margin-bottom: 14px; width: 100%; }
+
+/* 兼容原有的 label 以及新增的 div.group-title 样式，切断文字联动点击效果 */
+.control-group label, .control-group .group-title {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.9rem; 
+    font-weight: 600;
+    margin-bottom: 6px; 
+    color: #3f3f46;
+}
+
+/* ---------------- 重写滑块样式（使其更细更精致，且滑过的区域为黑） ---------------- */
+input[type="range"] { 
+    -webkit-appearance: none; 
+    appearance: none;
+    width: 100%; 
+    cursor: pointer; 
+    background: transparent; 
+    margin: 4px 0; /* 上下间距微缩 */
+    outline: none;
+    /* 设置一个 CSS 变量用来动态接收 JS 传来的滑过百分比 */
+    --range-progress: 50%; 
+}
+input[type="range"]::-webkit-slider-runnable-track {
+    width: 100%;
+    height: 4px; /* 轨道调细 */
+    /* 使用渐变色将滑块走过（左侧）的位置渲染为黑色，未走过的保持灰色 */
+    background: linear-gradient(to right, var(--accent) var(--range-progress, 0%), var(--border) var(--range-progress, 0%));
+    border-radius: 2px;
+}
+input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    height: 14px; /* 从16px缩小到14px */
+    width: 14px;  /* 从16px缩小到14px */
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+    margin-top: -5px; /* 轨道高度4px，手柄14px，向上偏移 (14-4)/2=5px */
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+/* Firefox 原生支持滑过进度的渲染 */
+input[type="range"]::-moz-range-track {
+    width: 100%;
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+}
+input[type="range"]::-moz-range-progress {
+    background: var(--accent);
+    height: 4px;
+    border-radius: 2px;
+}
+input[type="range"]::-moz-range-thumb {
+    height: 14px; /* 从16px缩小到14px */
+    width: 14px;  /* 从16px缩小到14px */
+    border: none;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+
+input[type="checkbox"] { cursor: pointer; accent-color: var(--accent); width: 16px; height: 16px; } 
+
+/* 色彩输入框美化组合，确保宽度100%不溢出 */
+.color-input-wrapper {
+    display: flex;
+    align-items: center;
+    border: 1px solid var(--border);
+    border-radius: 0; /* 取消倒圆角，改为直角 */
+    overflow: hidden;
+    background: #ffffff;
+    height: 20px; /* 减去一半左右的高度 */
+    width: 100%;
+}
+.color-input-wrapper input[type="color"] { 
+    -webkit-appearance: none; 
+    width: 24px; /* 色块宽度也相应调小 */
+    height: 100%; 
+    cursor: pointer; 
+    border: none; 
+    padding: 0; 
+    background: none; 
+}
+.color-input-wrapper input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+.color-input-wrapper input[type="color"]::-webkit-color-swatch { 
+    border: none; 
+    border-right: 1px solid var(--border); 
+    border-radius: 0; /* 直角 */
+}
+
+/* 优化十六进制色值显示的字体，使用精致的无衬线 Sans 字体 */
+.color-input-wrapper input[type="text"] {
+    flex: 1;
+    width: 100%; 
+    height: 100%; /* 撑满父级高度 */
+    margin: 0;
+    border: none;
+    outline: none;
+    padding: 0; 
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-size: 0.75rem; /* 字号随高度减小 */
+    font-weight: 500; 
+    letter-spacing: 0.5px; 
+    color: var(--accent); 
+    background: transparent;
+    text-align: center; 
+    line-height: 18px; /* (20px外框 - 上下各1px边框) 确保垂直绝对居中 */
+    min-width: 0;
+}
+
+/* 新增：画布背景圆形拾色器UI样式 */
+.circle-color {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px; 
+    height: 18px;
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    cursor: pointer;
+    padding: 0;
+    background: transparent;
+    outline: none;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+}
+.circle-color::-webkit-color-swatch-wrapper { padding: 0; }
+.circle-color::-webkit-color-swatch { border: none; border-radius: 50%; }
+.circle-color::-moz-color-swatch { border: none; border-radius: 50%; }
+
+button, .upload-btn {
+    display: block; width: 100%; background: var(--accent); color: white;
+    border: none; padding: 12px; font-weight: 600; font-size: 0.9rem; 
+    cursor: pointer; text-align: center; margin-top: 10px; margin-bottom: 16px; transition: 0.2s;
+}
+
+/* 将所有按钮（除随机色彩按钮外）滑过时的区域设定为比黑色稍浅一点的深灰色，增加交互反馈 */
+button:not(#btnRandomColor):hover, .upload-btn:hover { 
+    background: #27272a !important; 
+    color: #ffffff !important; 
+}
+
+input[type="file"] { display: none; }
+.val { color: var(--accent); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 0.9rem; font-weight: 500;}
+
+/* 图像预览框样式，保证不溢出且与两边平齐 */
+.preview-box {
+    width: 100%;
+    height: 120px; 
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #000000; 
+    overflow: hidden;
+    flex-shrink: 0;
+    transition: background 0.3s ease; /* 背景色变化时增加平滑过渡动画 */
+}
+.preview-box img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+}
+
+#clearImg {
+    position: absolute;
+    right: 16px; 
+    cursor: pointer;
+    color: #9ca3af; 
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-weight: 300; 
+    font-size: 1.2rem;
+    line-height: 1;
+    transition: color 0.1s;
+    padding: 4px;
+}
+#clearImg:hover { 
+    color: #d1d5db; 
+}
+
+.checkbox-label {
+    display: flex !important; justify-content: space-between !important;
+    align-items: center; gap: 8px; cursor: pointer; font-size: 0.9rem;
+    font-weight: 600 !important; margin-top: 8px; margin-bottom: 0 !important;
+    color: #3f3f46;
+}
+
+.export-wrapper {
+    margin-top: auto; 
+    padding-top: 10px;
+}
+.export-title {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #3f3f46;
+    margin-bottom: 8px;
+}
+/* Grid 布局支持精确定位和跨列 */
+.download-group {
+    display: grid; 
+    grid-template-columns: 1fr; 
+    gap: 8px; 
+}
+/* 将下载按钮的字体粗细设为正常 (400) */
+.download-group button { margin-top: 0; font-weight: 400; margin-bottom: 0;}
+</style>
+</head>
+<body>
+<div class="canvas-area">
+    <canvas id="mainCanvas" width="630" height="840"></canvas>
+</div>
+<div class="controls">
+    <!-- 图像预览框 -->
+    <div class="preview-box" id="previewBox">
+        <span id="previewText" style="color: #a1a1aa; font-size: 0.9rem; font-weight: 600;">Image Preview</span>
+        <img id="previewImg" alt="Image Preview" style="display: none;">
+    </div>
+
+<!-- 上传按钮框 -->
+<label class="upload-btn" style="position: relative; display: flex; justify-content: center; align-items: center; gap: 8px;">
+    <span id="uploadText">上传图片 Upload</span>
+    <span id="fileName" style="display: none;"></span>
+    <span id="clearImg" style="display: none;" title="取消当前图片">X</span>
+    <input type="file" id="imageUpload" accept="image/jpeg, image/png">
+</label>
+
+<!-- 整合后的：图形与描边色彩控制 -->
+<div class="control-group">
+    <div class="group-title">
+        <span>自定义色彩 (Colors)</span>
+        <div style="display: flex; align-items: center; gap: 6px; font-weight: normal;">
+            <span style="font-size: 0.75rem; color: #71717a;">背景 BG</span>
+            <input type="color" id="bgColor" value="#ffffff" class="circle-color" title="更改画布背景色">
+        </div>
+    </div>
+    <div style="display: flex; gap: 10px; width: 100%;">
+        <div style="flex: 1; display: flex; flex-direction: column; gap: 4px; min-width: 0;">
+            <span style="font-size: 0.75rem; color: #71717a;">图形 Shape</span>
+            <div class="color-input-wrapper">
+                <input type="color" id="shapeColor" value="#007aff">
+                <input type="text" id="shapeColorText" value="#007aff" maxlength="7">
+            </div>
+        </div>
+        <div style="flex: 1; display: flex; flex-direction: column; gap: 4px; min-width: 0;">
+            <span style="font-size: 0.75rem; color: #71717a;">描边 Stroke</span>
+            <div class="color-input-wrapper">
+                <input type="color" id="strokeColor" value="#000000">
+                <input type="text" id="strokeColorText" value="#000000" maxlength="7">
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 轮廓模式控制 -->
+<label class="checkbox-label" style="margin-bottom: 14px !important;">
+    <span>仅提取边缘轮廓 (不勾选为实心)</span>
+    <input type="checkbox" id="outlineMode" checked>
+</label>
+
+<!-- 识别阈值控制 -->
+<div class="control-group">
+    <label><span>识别阈值 (Threshold)</span> <span class="val" id="v_threshold">128</span></label>
+    <input type="range" id="threshold" min="0" max="255" value="128">
+</div>
+
+<!-- 图形状粗细控制 -->
+<div class="control-group">
+    <label><span>图形状粗细</span> <span class="val" id="v_outlineW">6</span></label>
+    <input type="range" id="outlineW" min="1" max="30" value="6">
+</div>
+
+<!-- 描边粗细控制 -->
+<div class="control-group">
+    <label><span>描边粗细 (Stroke Width)</span> <span class="val" id="v_strokeW">3</span></label>
+    <input type="range" id="strokeW" min="0" max="20" value="3">
+</div>
+
+<!-- 像素风格控制 -->
+<div class="control-group">
+    <label><span>像素风格 (Pixel Size)</span> <span class="val" id="v_pixelSize">1</span></label>
+    <input type="range" id="pixelSize" min="1" max="25" value="1">
+</div>
+
+<!-- 图形缩放控制 -->
+<div class="control-group">
+    <label><span>图形缩放 (Scale)</span> <span class="val" id="v_shapeScale">100%</span></label>
+    <input type="range" id="shapeScale" min="10" max="300" value="100">
+</div>
+
+<!-- 下载组 -->
+<div class="export-wrapper">
+    <div class="export-title">Export 导出</div>
+    <div class="download-group">
+        <button id="btnSvg">SVG</button>
+        <button id="btnRandomColor" title="开启随机色彩 (改变图形与画布背景色)" style="grid-column: 1 / -1; background: #e4e4e7; color: #18181b; font-size: 0.9rem; font-weight: 500; padding: 10px 0;">随机色彩 Random Color</button>
+    </div>
+</div>
+</div>
+<script>
+    const DOM = {
+        shapeScale: document.getElementById('shapeScale'),
+        threshold: document.getElementById('threshold'), 
+        outlineMode: document.getElementById('outlineMode'),
+        outlineW: document.getElementById('outlineW'),
+        strokeW: document.getElementById('strokeW'),
+        pixelSize: document.getElementById('pixelSize'),
+        previewBox: document.getElementById('previewBox'),
+        previewText: document.getElementById('previewText'),
+        previewImg: document.getElementById('previewImg'),
+        uploadText: document.getElementById('uploadText'),
+        fileName: document.getElementById('fileName'),
+        clearImg: document.getElementById('clearImg'),
+        canvas: document.getElementById('mainCanvas'),
+        upload: document.getElementById('imageUpload'),
+        btnSvg: document.getElementById('btnSvg'),
+        shapeColor: document.getElementById('shapeColor'),
+        shapeColorText: document.getElementById('shapeColorText'),
+        strokeColor: document.getElementById('strokeColor'),
+        strokeColorText: document.getElementById('strokeColorText'),
+        bgColor: document.getElementById('bgColor'),
+        btnRandomColor: document.getElementById('btnRandomColor') 
+    };
+
+    const ctx = DOM.canvas.getContext('2d');
+    let uploadedImg = null;
+    
+    // 全新缓存机制：用于储存无延时且不改变图形比例效果的 100% 基准渲染图
+    let cachedEffectCanvas = null;
+    let isEffectDirty = true; 
+    let renderFrame = null;
+
+    function getAverageColor(img) {
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = 1;
+        tempCanvas.height = 1;
+        const tempCtx = tempCanvas.getContext('2d');
+        tempCtx.drawImage(img, 0, 0, 1, 1);
+        const data = tempCtx.getImageData(0, 0, 1, 1).data;
+        if (data[3] === 0) return '#000000'; 
+        return `rgb(${data[0]}, ${data[1]}, ${data[2]})`;
+    }
+
+    function updateRangeProgress(el) {
+        const min = parseFloat(el.min) || 0;
+        const max = parseFloat(el.max) || 100;
+        const val = parseFloat(el.value);
+        const percent = ((val - min) / (max - min)) * 100;
+        el.style.setProperty('--range-progress', percent + '%');
+    }
+
+    function renderInstant() {
+        if (renderFrame) {
+            cancelAnimationFrame(renderFrame);
+        }
+        renderFrame = requestAnimationFrame(() => {
+            render();
+        });
+    }
+
+    ['threshold', 'outlineW', 'strokeW', 'pixelSize', 'shapeScale'].forEach(id => {
+        const el = DOM[id];
+        updateRangeProgress(el);
+        
+        el.addEventListener('input', (e) => {
+            updateRangeProgress(e.target);
+            const displayEl = document.getElementById('v_' + id);
+            if(displayEl) {
+                displayEl.innerText = id === 'shapeScale' ? e.target.value + '%' : e.target.value;
+            }
+            // 移除条件判断，确保 shapeScale(缩放) 时能够用原生超清质量重绘效果图
+            isEffectDirty = true;
+            renderInstant(); 
+        });
+    });
+    
+    DOM.outlineMode.addEventListener('change', () => {
+        isEffectDirty = true;
+        renderInstant();
+    });
+    
+    function handleColorInput(colorEl, textEl) {
+        textEl.value = colorEl.value.toUpperCase();
+        isEffectDirty = true;
+        renderInstant();
+    }
+    
+    function handleTextInput(textEl, colorEl) {
+        let val = textEl.value.trim();
+        if(!val.startsWith('#')) val = '#' + val;
+        if (/^#[0-9A-F]{6}$/i.test(val)) {
+            colorEl.value = val;
+            isEffectDirty = true;
+            renderInstant();
+        }
+    }
+
+    DOM.shapeColor.addEventListener('input', () => handleColorInput(DOM.shapeColor, DOM.shapeColorText));
+    DOM.strokeColor.addEventListener('input', () => handleColorInput(DOM.strokeColor, DOM.strokeColorText));
+    DOM.shapeColorText.addEventListener('input', () => handleTextInput(DOM.shapeColorText, DOM.shapeColor));
+    DOM.strokeColorText.addEventListener('input', () => handleTextInput(DOM.strokeColorText, DOM.strokeColor));
+
+    // 监听背景色彩UI改变：即时更改画布DOM的样式背景色
+    DOM.bgColor.addEventListener('input', (e) => {
+        DOM.canvas.style.backgroundColor = e.target.value;
+    });
+
+    // 重构随机色彩功能：精选时尚对撞色彩，完全移除黑色和暗色
+    DOM.btnRandomColor.addEventListener('click', () => {
+        const contrastingPairs = [
+            ['#FF6B6B', '#4ECDC4'], ['#FFE66D', '#8338EC'], ['#FF9F1C', '#2EC4B6'],
+            ['#E71D36', '#A2D2FF'], ['#3A86FF', '#FF006E'], ['#FB5607', '#80FFDB'],
+            ['#F4A261', '#5E60CE'], ['#FFAFCC', '#4361EE'], ['#9D4EDD', '#F94144'], 
+            ['#48BFE3', '#F3722C'], ['#F72585', '#4CC9F0'], ['#7209B7', '#4EA8DE'], 
+            ['#4361EE', '#F8961E'], ['#FFC8DD', '#007AFF'], ['#2A9D8F', '#F4A261'], 
+            ['#00FFFF', '#FF0055'], ['#FF3366', '#33CCFF'], ['#CCFF00', '#FF00CC'], 
+            ['#FFB5E8', '#B28DFF'], ['#85E3FF', '#FFB5E8'], ['#FFF5BA', '#FF9CEE'], 
+            ['#FF71CE', '#01CDFE'], ['#05FFA1', '#B967FF'], ['#FFFB96', '#01CDFE'], 
+            ['#FA8072', '#20B2AA'], ['#FF7F50', '#6495ED'], ['#FFD166', '#06D6A0'], 
+            ['#118AB2', '#EF476F'], ['#8338EC', '#FFBE0B'], ['#FFFFFF', '#FF006E'], 
+            ['#FFFFFF', '#3A86FF'], ['#FFFFFF', '#8338EC'], ['#FFFFFF', '#FF9F1C'],
+            ['#D4A373', '#9C89B8'], ['#F4F1DE', '#E07A5F'], ['#81B29A', '#F2CC8F'],
+            ['#E0B1CB', '#5E548E'], ['#FFD6A5', '#FDFFB6'], ['#CAFFBF', '#9BF6FF'], 
+            ['#A0C4FF', '#BDB2FF']
+        ];
+        
+        const pair = contrastingPairs[Math.floor(Math.random() * contrastingPairs.length)];
+        let isSwapped = Math.random() > 0.5;
+        let targetShapeColor = isSwapped ? pair[1] : pair[0];
+        let targetBgColor = isSwapped ? pair[0] : pair[1];
+        
+        DOM.shapeColor.value = targetShapeColor;
+        DOM.shapeColorText.value = targetShapeColor;
+        
+        DOM.bgColor.value = targetBgColor;
+        DOM.canvas.style.backgroundColor = targetBgColor;
+        
+        isEffectDirty = true;
+        renderInstant();
+    });
+
+    DOM.upload.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        let nameStr = file.name;
+        const dotIdx = nameStr.lastIndexOf('.');
+        if (dotIdx !== -1) nameStr = nameStr.substring(0, dotIdx);
+        if (nameStr.length > 8) nameStr = nameStr.substring(0, 8) + '...';
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const img = new Image();
+            img.onload = () => { 
+                uploadedImg = img; 
+                
+                DOM.previewBox.style.background = getAverageColor(img);
+                DOM.previewBox.style.display = 'flex';
+                DOM.previewText.style.display = 'none'; 
+                DOM.previewImg.style.display = 'block';
+                DOM.previewImg.src = event.target.result;
+                
+                DOM.uploadText.style.display = 'none';
+                DOM.fileName.innerText = nameStr;
+                DOM.fileName.style.display = 'inline';
+                DOM.clearImg.style.display = 'block'; 
+                
+                DOM.shapeScale.value = 100;
+                document.getElementById('v_shapeScale').innerText = '100%';
+                updateRangeProgress(DOM.shapeScale);
+
+                isEffectDirty = true;
+                renderInstant(); 
+            }
+            img.src = event.target.result;
+        }
+        reader.readAsDataURL(file);
+    });
+
+    DOM.clearImg.addEventListener('click', (e) => {
+        e.preventDefault(); 
+        e.stopPropagation();
+        
+        uploadedImg = null;
+        DOM.upload.value = ''; 
+        
+        DOM.previewBox.style.background = '#000000';
+        DOM.previewImg.style.display = 'none';
+        DOM.previewImg.src = '';
+        DOM.previewText.style.display = 'block';
+        
+        DOM.fileName.style.display = 'none';
+        DOM.clearImg.style.display = 'none';
+        DOM.uploadText.style.display = 'inline';
+        
+        DOM.shapeScale.value = 100;
+        document.getElementById('v_shapeScale').innerText = '100%';
+        updateRangeProgress(DOM.shapeScale);
+        
+        isEffectDirty = true;
+        renderInstant(); 
+    });
+
+    DOM.btnSvg.addEventListener('click', () => downloadCanvas('svg'));
+
+    // 核心更改点：通过传入 pSize 判断是否需要消锯齿平滑处理
+    function extractPath(mask, w, h, pSize) {
+        const edges = new Map();
+        const addEdge = (x1, y1, x2, y2) => {
+            const key = x1 + ',' + y1;
+            if (!edges.has(key)) edges.set(key, []);
+            edges.get(key).push({x: x2, y: y2});
+        };
+        
+        for (let y = 0; y < h; y++) {
+            for (let x = 0; x < w; x++) {
+                if (mask[y * w + x]) {
+                    if (y === 0 || !mask[(y - 1) * w + x]) addEdge(x, y, x + 1, y);
+                    if (y === h - 1 || !mask[(y + 1) * w + x]) addEdge(x + 1, y + 1, x, y + 1);
+                    if (x === 0 || !mask[y * w + (x - 1)]) addEdge(x, y + 1, x, y);
+                    if (x === w - 1 || !mask[y * w + (x + 1)]) addEdge(x + 1, y, x + 1, y + 1);
+                }
+            }
+        }
+        
+        let pathD = "";
+        for (let [startKey, outs] of edges) {
+            while (outs.length > 0) {
+                let pts = [];
+                let currentKey = startKey;
+                let [cx, cy] = currentKey.split(',').map(Number);
+                pts.push({x: cx, y: cy});
+                
+                while (true) {
+                    let outList = edges.get(currentKey);
+                    if (!outList || outList.length === 0) break;
+                    let nextNode = outList.pop();
+                    pts.push(nextNode);
+                    currentKey = nextNode.x + ',' + nextNode.y;
+                    if (currentKey === startKey) break;
+                }
+                
+                if (pts.length < 2) continue;
+                
+                // 【核心平滑算法】：如果处于默认状态（无像素风格），执行窗口滑动平均消除方块狗牙
+                if (pSize === 1 && pts.length > 8) {
+                    pts.pop(); // 移除首尾闭合重复点以保证平均权重的绝对均衡
+                    let smoothed = [];
+                    let radius = 4; // 采样窗口越大越平滑，4为绝佳均衡参数
+                    for (let i = 0; i < pts.length; i++) {
+                        let sumX = 0, sumY = 0;
+                        for (let j = -radius; j <= radius; j++) {
+                            // 使用 * 2 避免出现负数求余问题
+                            let idx = (i + j + pts.length * 2) % pts.length;
+                            sumX += pts[idx].x;
+                            sumY += pts[idx].y;
+                        }
+                        smoothed.push({
+                            x: parseFloat((sumX / (2 * radius + 1)).toFixed(2)),
+                            y: parseFloat((sumY / (2 * radius + 1)).toFixed(2))
+                        });
+                    }
+                    pts = smoothed;
+                    pts.push(pts[0]); // 重新闭合循环
+                }
+                
+                // 去除/压缩共线和微距冗余节点（智能兼容平滑曲线和直角楼梯）
+                let opt = [];
+                for (let i = 0; i < pts.length; i++) {
+                    if (opt.length >= 2) {
+                        let p1 = opt[opt.length - 2];
+                        let p2 = opt[opt.length - 1];
+                        let p3 = pts[i];
+                        
+                        let dx = p3.x - p1.x;
+                        let dy = p3.y - p1.y;
+                        let dist = Math.sqrt(dx * dx + dy * dy);
+                        // 通过叉积换算出垂线偏离距离
+                        let cross = Math.abs(dx * (p2.y - p1.y) - dy * (p2.x - p1.x));
+                        
+                        // 当节点向直线偏移小于 0.15 像素，将其移除以精简 SVG
+                        if (dist === 0 || (cross / dist) < 0.15) {
+                            opt.pop(); 
+                        }
+                    }
+                    opt.push(pts[i]);
+                }
+                opt.pop(); // 去除末尾点，进入闭合接缝消除
+                
+                while (opt.length >= 3) {
+                    let p1 = opt[opt.length - 1], p2 = opt[0], p3 = opt[1];
+                    let dx = p3.x - p1.x; let dy = p3.y - p1.y;
+                    let dist = Math.sqrt(dx * dx + dy * dy);
+                    let cross = Math.abs(dx * (p2.y - p1.y) - dy * (p2.x - p1.x));
+                    if (dist === 0 || (cross / dist) < 0.15) opt.shift();
+                    else break;
+                }
+                while (opt.length >= 3) {
+                    let p1 = opt[opt.length - 2], p2 = opt[opt.length - 1], p3 = opt[0];
+                    let dx = p3.x - p1.x; let dy = p3.y - p1.y;
+                    let dist = Math.sqrt(dx * dx + dy * dy);
+                    let cross = Math.abs(dx * (p2.y - p1.y) - dy * (p2.x - p1.x));
+                    if (dist === 0 || (cross / dist) < 0.15) opt.pop();
+                    else break;
+                }
+                
+                if (opt.length > 0) {
+                    pathD += `M ${opt[0].x} ${opt[0].y} `;
+                    for (let i = 1; i < opt.length; i++) pathD += `L ${opt[i].x} ${opt[i].y} `;
+                    pathD += "Z ";
+                }
+            }
+        }
+        return pathD;
+    }
+
+    function extractSVGPaths(canvas, shapeHex, strokeHex, strokeW, pSize) {
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        const w = canvas.width, h = canvas.height;
+        const data = ctx.getImageData(0, 0, w, h).data;
+        
+        const hexToRgb = (hex) => {
+            hex = hex.startsWith('#') ? hex.slice(1) : hex;
+            const bigint = parseInt(hex, 16);
+            return { r: (bigint >> 16) & 255, g: (bigint >> 8) & 255, b: bigint & 255 };
+        };
+        const sRgb = hexToRgb(shapeHex);
+        const stRgb = hexToRgb(strokeHex);
+        
+        const dist = (r1,g1,b1, r2,g2,b2) => Math.abs(r1-r2) + Math.abs(g1-g2) + Math.abs(b1-b2);
+        const shapeMask = new Uint8Array(w * h);
+        const strokeMask = new Uint8Array(w * h);
+        
+        // 基于网格逐像素扫描追踪所有可见边缘
+        for (let y = 0; y < h; y++) {
+            for (let x = 0; x < w; x++) {
+                let idx = (y * w + x) * 4;
+                if (data[idx+3] > 128) {
+                    let r = data[idx], g = data[idx+1], b = data[idx+2];
+                    const isShape = dist(r,g,b, sRgb.r,sRgb.g,sRgb.b) <= dist(r,g,b, stRgb.r,stRgb.g,stRgb.b);
+                    
+                    if (isShape) {
+                        shapeMask[y * w + x] = 1;
+                        if (strokeW > 0) strokeMask[y * w + x] = 1; 
+                    } else {
+                        if (strokeW > 0) strokeMask[y * w + x] = 1;
+                    }
+                }
+            }
+        }
+        return {
+            shapePath: extractPath(shapeMask, w, h, pSize),
+            strokePath: extractPath(strokeMask, w, h, pSize)
+        };
+    }
+
+    // 【极速安全下载引擎 - 升级高精度/矢量导出】
+    function downloadCanvas(type) {
+        try {
+            const triggerDownload = (url, filename) => {
+                const link = document.createElement('a');
+                link.download = filename;
+                link.href = url;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                setTimeout(() => URL.revokeObjectURL(url), 1000); 
+            };
+
+            const originW = 630;
+            const originH = 840;
+            
+            if (type === 'svg') {
+                const stW = parseInt(DOM.strokeW.value);
+                const pSize = parseInt(DOM.pixelSize.value); 
+                
+                // 核心修复逻辑：临时隐藏画布描边，提取100%纯净的精确图形基础路径
+                const originalStrokeW = DOM.strokeW.value;
+                DOM.strokeW.value = 0; 
+                const shapeOnlyCanvas = generateCanvas(1);
+                DOM.strokeW.value = originalStrokeW; 
+                
+                // 在 extractPath 函数内已应用平均平滑算法，此处提取出来的 shapePath 已经是完美平滑无锯齿的
+                const { shapePath } = extractSVGPaths(shapeOnlyCanvas, DOM.shapeColor.value, DOM.strokeColor.value, 0, pSize);
+                
+                let strokePath = "";
+                if (pSize > 1 && stW > 0) {
+                    // 仅当 pSize > 1 (像素风格模式) 时，提取硬核像素描边区块以兼容阶梯风格
+                    const ext = extractSVGPaths(cachedEffectCanvas, DOM.shapeColor.value, DOM.strokeColor.value, stW, pSize);
+                    strokePath = ext.strokePath;
+                }
+                
+                // 清理临时画布以释放内存
+                shapeOnlyCanvas.width = 0; 
+                shapeOnlyCanvas.height = 0;
+                
+                // 极简组装：高清模式下，直接利用平滑的 shapePath 进行 SVG 纯矢量原生描边，从而达到真正平滑且与预览 1:1 一致的效果
+                const svgContent = `<svg xmlns="http://www.w3.org/2000/svg" width="${originW}" height="${originH}" viewBox="0 0 ${originW} ${originH}">
+                    <rect width="100%" height="100%" fill="${DOM.bgColor.value}" />
+                    <g>
+                        ${stW > 0 ? (pSize === 1 
+                            ? (shapePath ? `<path d="${shapePath}" fill="${DOM.strokeColor.value}" stroke="${DOM.strokeColor.value}" stroke-width="${stW * 2}" stroke-linecap="round" stroke-linejoin="round" fill-rule="evenodd" />` : '')
+                            : (strokePath ? `<path d="${strokePath}" fill="${DOM.strokeColor.value}" fill-rule="evenodd" />` : '')) : ''}
+                        ${shapePath ? `<path d="${shapePath}" fill="${DOM.shapeColor.value}" fill-rule="evenodd" />` : ''}
+                    </g>
+                </svg>`;
+                const blob = new Blob([svgContent], {type: 'image/svg+xml;charset=utf-8'});
+                triggerDownload(URL.createObjectURL(blob), 'outline-stroke.svg');
+            }
+        } catch (e) {
+            console.error(e);
+            alert("Export failed. 导出过程遇到拦截或内存不足。");
+        }
+    }
+
+    /**
+     * 【绝对忠于视觉 1:1 的基础渲染层】
+     */
+    function generateCanvas(scale = 1) {
+        const w = 630 * scale;
+        const h = 840 * scale;
+        
+        const shapeColorHex = DOM.shapeColor.value;
+        const strokeColorHex = DOM.strokeColor.value;
+
+        const hexToRgb = (hex) => {
+            const bigint = parseInt(hex.slice(1), 16);
+            return { r: (bigint >> 16) & 255, g: (bigint >> 8) & 255, b: bigint & 255 };
+        };
+        const shapeRgb = hexToRgb(shapeColorHex);
+        const strokeRgb = hexToRgb(strokeColorHex);
+
+        const baseCanvas = document.createElement('canvas');
+        baseCanvas.width = w; baseCanvas.height = h;
+        const bCtx = baseCanvas.getContext('2d', { willReadFrequently: true });
+        
+        bCtx.fillStyle = 'black';
+        bCtx.fillRect(0, 0, w, h);
+
+        if (uploadedImg) {
+            const userScale = parseInt(DOM.shapeScale.value) / 100;
+            const baseScalePrev = Math.min(w / uploadedImg.width, h / uploadedImg.height) * 0.8 * userScale;
+            const iw = Math.floor(uploadedImg.width * baseScalePrev);
+            const ih = Math.floor(uploadedImg.height * baseScalePrev);
+
+            if (iw > 0 && ih > 0) {
+                const imgCanvas = document.createElement('canvas');
+                imgCanvas.width = iw; imgCanvas.height = ih;
+                const iCtx = imgCanvas.getContext('2d', { willReadFrequently: true });
+                iCtx.drawImage(uploadedImg, 0, 0, iw, ih);
+
+                const imgData = iCtx.getImageData(0, 0, iw, ih);
+                const data = imgData.data;
+                const maskData = new ImageData(iw, ih);
+                const mData = maskData.data;
+
+                const thresholdVal = parseInt(DOM.threshold.value);
+                const bgLuma = 255; 
+
+                for (let i = 0; i < data.length; i += 4) {
+                    let r = data[i], g = data[i+1], b = data[i+2], a = data[i+3];
+                    let luma = 0.299 * r + 0.587 * g + 0.114 * b;
+                    let alpha = a / 255.0;
+                    let finalLuma = luma * alpha + bgLuma * (1 - alpha);
+                    let isShape = (finalLuma <= thresholdVal);
+
+                    if (isShape) {
+                        mData[i] = 255; mData[i+1] = 255; mData[i+2] = 255; mData[i+3] = 255;
+                    } else {
+                        mData[i] = 0; mData[i+1] = 0; mData[i+2] = 0; mData[i+3] = 255;
+                    }
+                }
+                iCtx.putImageData(maskData, 0, 0);
+                
+                const offsetX = Math.floor((w - iw) / 2);
+                const offsetY = Math.floor((h - ih) / 2);
+                bCtx.drawImage(imgCanvas, offsetX, offsetY); 
+                
+                imgCanvas.width = 0; imgCanvas.height = 0; 
+            }
+        } 
+
+        const blueCanvas = document.createElement('canvas');
+        blueCanvas.width = w; blueCanvas.height = h;
+        const blueCtx = blueCanvas.getContext('2d', { willReadFrequently: true });
+
+        // 使用变量统一管理图像基础数据，节省重绘与内存开销
+        let bPixels;
+        if (DOM.outlineMode.checked) {
+            const outlineThickness = parseInt(DOM.outlineW.value) * scale;
+            
+            blueCtx.filter = `blur(${outlineThickness}px)`;
+            blueCtx.drawImage(baseCanvas, 0, 0);
+            
+            const bData = blueCtx.getImageData(0, 0, w, h);
+            bPixels = bData.data;
+            for(let i = 0; i < bPixels.length; i += 4) {
+                const luma = bPixels[i];
+                let alpha = 0;
+                if (luma > 8 && luma < 247) {
+                    alpha = 255; 
+                }
+                bPixels[i] = shapeRgb.r; 
+                bPixels[i+1] = shapeRgb.g; 
+                bPixels[i+2] = shapeRgb.b;
+                bPixels[i+3] = alpha; 
+            }
+            blueCtx.putImageData(bData, 0, 0);
+        } else {
+            blueCtx.filter = `blur(${1 * scale}px)`;
+            blueCtx.drawImage(baseCanvas, 0, 0);
+            const bData = blueCtx.getImageData(0, 0, w, h);
+            bPixels = bData.data;
+            for(let i = 0; i < bPixels.length; i += 4) {
+                const luma = bPixels[i];
+                let alpha = 0;
+                if (luma > 128) {
+                    alpha = 255; 
+                }
+                bPixels[i] = shapeRgb.r; 
+                bPixels[i+1] = shapeRgb.g; 
+                bPixels[i+2] = shapeRgb.b;
+                bPixels[i+3] = alpha;
+            }
+            blueCtx.putImageData(bData, 0, 0);
+        }
+
+        const strokeThickness = parseInt(DOM.strokeW.value) * scale;
+        const pSize = parseInt(DOM.pixelSize.value) * scale;
+        
+        let strokeCanvas = null;
+        let sCtx = null;
+
+        // 【性能飞跃突破点1：非像素模式时使用原生路径渲染(Native Path Stroke)，替代密集的 drawImage 循环，速度提升100倍实现0延时同步】
+        if (strokeThickness > 0 && parseInt(DOM.pixelSize.value) === 1) {
+            strokeCanvas = document.createElement('canvas');
+            strokeCanvas.width = w; strokeCanvas.height = h;
+            sCtx = strokeCanvas.getContext('2d', { willReadFrequently: true });
+            
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = w; tempCanvas.height = h;
+            const tCtx = tempCanvas.getContext('2d');
+            
+            tCtx.drawImage(blueCanvas, 0, 0);
+            tCtx.globalCompositeOperation = 'source-in';
+            tCtx.fillStyle = strokeColorHex;
+            tCtx.fillRect(0, 0, w, h);
+            tCtx.globalCompositeOperation = 'source-over';
+
+            tCtx.lineCap = 'round';
+            tCtx.lineJoin = 'round';
+            // 修复: 增加1像素从而补偿像素区域(0.5)产生的视觉偏移，确保上下左右四周完美等宽对称
+            tCtx.lineWidth = strokeThickness * 2 + 1;
+            tCtx.strokeStyle = strokeColorHex;
+
+            tCtx.beginPath();
+            for (let y = 0; y < h; y++) {
+                for (let x = 0; x < w; x++) {
+                    const idx = (y * w + x) * 4;
+                    if (bPixels[idx+3] > 128) {
+                        let isEdge = false;
+                        if (x === 0 || x === w - 1 || y === 0 || y === h - 1) {
+                            isEdge = true;
+                        } else {
+                            if (bPixels[idx - 4 + 3] <= 128 || bPixels[idx + 4 + 3] <= 128 ||
+                                bPixels[idx - w*4 + 3] <= 128 || bPixels[idx + w*4 + 3] <= 128) {
+                                isEdge = true;
+                            }
+                        }
+                        if (isEdge) {
+                            // 修复: 精确定位到像素视觉几何中心 (x + 0.5, y + 0.5) ，消除由于纯整数带来的 0.5px 左上侧偏移及形变导致的一边粗一边细
+                            tCtx.moveTo(x + 0.5, y + 0.5);
+                            tCtx.lineTo(x + 0.501, y + 0.5); 
+                        }
+                    }
+                }
+            }
+            tCtx.stroke();
+
+            // 移除原本引发阶梯状无响应的 blur 滤镜和强制二值化，直接利用底层高质量抗锯齿描边，实现每滑动1像素都即时精准的外扩变化
+            sCtx.drawImage(tempCanvas, 0, 0);
+            
+            tempCanvas.width = 0; tempCanvas.height = 0; 
+        }
+
+        const finalCanvas = document.createElement('canvas');
+        finalCanvas.width = w; finalCanvas.height = h;
+        const fCtx = finalCanvas.getContext('2d', { willReadFrequently: true });
+
+        // 【性能飞跃突破点2：切断像素模式对圆润描边无意义的运算链路，并采用块域映射极速生成法】
+        if (parseInt(DOM.pixelSize.value) === 1) {
+            if (strokeThickness > 0 && strokeCanvas) {
+                fCtx.drawImage(strokeCanvas, 0, 0); 
+            }
+            fCtx.drawImage(blueCanvas, 0, 0);       
+        } else {
+            const gridW = Math.ceil(w / pSize);
+            const gridH = Math.ceil(h / pSize);
+            const blueGrid = new Array(gridW * gridH).fill(false);
+            const colorGrid = new Array(gridW * gridH).fill(null);
+
+            for (let y = 0; y < h; y += pSize) {
+                for (let x = 0; x < w; x += pSize) {
+                    let hasBlue = false;
+                    let sR = 0, sG = 0, sB = 0;
+                    
+                    for (let dy = 0; dy < pSize; dy++) {
+                        for (let dx = 0; dx < pSize; dx++) {
+                            const px = x + dx; const py = y + dy;
+                            if (py < h && px < w) {
+                                const idx = (py * w + px) * 4;
+                                if (bPixels[idx+3] > 64) {
+                                    hasBlue = true;
+                                    sR = bPixels[idx]; sG = bPixels[idx+1]; sB = bPixels[idx+2];
+                                }
+                            }
+                        }
+                    }
+                    
+                    if (hasBlue) {
+                        const gx = Math.floor(x / pSize);
+                        const gy = Math.floor(y / pSize);
+                        blueGrid[gy * gridW + gx] = true;
+                        colorGrid[gy * gridW + gx] = [sR, sG, sB];
+                    }
+                }
+            }
+
+            const outData = fCtx.createImageData(w, h);
+            const oData = outData.data;
+            
+            let expandRadius = 0;
+            let expandSearch = 0;
+            if (strokeThickness > 0) {
+                // 【已修复】确保在像素模式下，无论 pSize 数值多大，只要有描边（strokeThickness > 0），至少会强制扩展 1.0 个像素块，避免描边消失。
+                expandRadius = Math.max(1.0, strokeThickness / pSize);
+                expandSearch = Math.ceil(expandRadius);
+            }
+
+            const strokeGrid = new Array(gridW * gridH).fill(false);
+
+            if (expandRadius > 0) {
+                const edgeGrid = [];
+                for (let gy = 0; gy < gridH; gy++) {
+                    for (let gx = 0; gx < gridW; gx++) {
+                        if (blueGrid[gy * gridW + gx]) {
+                            let isEdge = false;
+                            if (gx === 0 || gx === gridW - 1 || gy === 0 || gy === gridH - 1) {
+                                isEdge = true;
+                            } else {
+                                if (!blueGrid[gy * gridW + (gx - 1)] || !blueGrid[gy * gridW + (gx + 1)] ||
+                                    !blueGrid[(gy - 1) * gridW + gx] || !blueGrid[(gy + 1) * gridW + gx]) {
+                                    isEdge = true;
+                                }
+                            }
+                            if (isEdge) {
+                                edgeGrid.push({x: gx, y: gy});
+                            }
+                        }
+                    }
+                }
+
+                const rSq = (expandRadius + 0.5) * (expandRadius + 0.5);
+                for (let i = 0; i < edgeGrid.length; i++) {
+                    const ex = edgeGrid[i].x;
+                    const ey = edgeGrid[i].y;
+                    const minY = Math.max(0, ey - expandSearch);
+                    const maxY = Math.min(gridH - 1, ey + expandSearch);
+                    const minX = Math.max(0, ex - expandSearch);
+                    const maxX = Math.min(gridW - 1, ex + expandSearch);
+
+                    for (let sy = minY; sy <= maxY; sy++) {
+                        const dy = sy - ey;
+                        for (let sx = minX; sx <= maxX; sx++) {
+                            const dx = sx - ex;
+                            if (dx * dx + dy * dy <= rSq) {
+                                strokeGrid[sy * gridW + sx] = true;
+                            }
+                        }
+                    }
+                }
+            }
+
+            for (let gy = 0; gy < gridH; gy++) {
+                for (let gx = 0; gx < gridW; gx++) {
+                    let fA = 0, fR = 0, fG = 0, fB = 0;
+                    
+                    const idx = gy * gridW + gx;
+                    if (blueGrid[idx]) {
+                        const c = colorGrid[idx];
+                        fR = c[0]; fG = c[1]; fB = c[2]; fA = 255;
+                    } else if (strokeGrid[idx]) {
+                        fR = strokeRgb.r; fG = strokeRgb.g; fB = strokeRgb.b; fA = 255;
+                    }
+
+                    if (fA > 0) {
+                        for (let dy = 0; dy < pSize; dy++) {
+                            for (let dx = 0; dx < pSize; dx++) {
+                                const px = gx * pSize + dx;
+                                const py = gy * pSize + dy;
+                                if (py < h && px < w) {
+                                    const fillIndex = (py * w + px) * 4;
+                                    oData[fillIndex] = fR;
+                                    oData[fillIndex+1] = fG;
+                                    oData[fillIndex+2] = fB;
+                                    oData[fillIndex+3] = fA;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            fCtx.putImageData(outData, 0, 0);
+        }
+        
+        baseCanvas.width = 0; baseCanvas.height = 0;
+        blueCanvas.width = 0; blueCanvas.height = 0;
+        if (strokeCanvas) {
+            strokeCanvas.width = 0; strokeCanvas.height = 0;
+        }
+
+        return finalCanvas;
+    }
+
+    function render() {
+        if (isEffectDirty) {
+            cachedEffectCanvas = generateCanvas(1);
+            isEffectDirty = false;
+        }
+
+        ctx.clearRect(0, 0, 630, 840);
+        
+        if (cachedEffectCanvas) {
+            ctx.save();
+            
+            if (parseInt(DOM.pixelSize.value) > 1) {
+                ctx.imageSmoothingEnabled = false;
+            } else {
+                ctx.imageSmoothingEnabled = true;
+            }
+            
+            // 去除外部暴力放大拉伸，1:1将原生高清画面绘制到屏幕
+            ctx.drawImage(cachedEffectCanvas, 0, 0);
+            ctx.restore();
+        }
+    }
+
+    // 页面加载完成后同步背景初始化并绘制初始视图
+    window.onload = () => {
+        DOM.canvas.style.backgroundColor = DOM.bgColor.value;
+        render();
+    };
+</script>
+</body>
+</html>
+    
+  </body>
+  
+</html>
